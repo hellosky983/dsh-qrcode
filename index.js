@@ -2,6 +2,8 @@ import { defineTool } from '@deepseek-ai/dsh-tools'
 
 export const name = 'qrcode'
 
+export const inject = ['tools']
+
 
 // [version-1][ecl] where ecl: 0=L, 1=M, 2=Q, 3=H
 const ECC_CODEWORDS_PER_BLOCK = [
