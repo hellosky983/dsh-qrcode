@@ -528,10 +528,164 @@ function renderPngDataUrl(matrix, opts) {
   return 'data:image/png;base64,' + bytesToBase64(bytes);
 }
 
+// Pure-JS 1D barcode generator: Code128 (Set B + Set C) and EAN-13.
+// No network, no shell, no dependencies. Verified against zxing-cpp.
+
+
+// Code128: 107 symbols (103 data + 3 starts + 1 stop), each a 11-module pattern
+// of bars(1)/spaces(0); the last (stop) is 13 modules. Source: ISO/IEC 15417.
+const BARS = [
+  '11011001100','11001101100','11001100110','10010011000','10010001100',
+  '10001001100','10011001000','10011000100','10001100100','11001001000',
+  '11001000100','11000100100','10110011100','10011011100','10011001110',
+  '10111001100','10011101100','10011100110','11001110010','11001011100',
+  '11001001110','11011100100','11001110100','11101101110','11101001100',
+  '11100101100','11100100110','11101100100','11100110100','11100110010',
+  '11011011000','11011000110','11000110110','10100011000','10001011000',
+  '10001000110','10110001000','10001101000','10001100010','11010001000',
+  '11000101000','11000100010','10110111000','10110001110','10001101110',
+  '10111011000','10111000110','10001110110','11101110110','11010001110',
+  '11000101110','11011101000','11011100010','11011101110','11101011000',
+  '11101000110','11100010110','11101101000','11101100010','11100011010',
+  '11101111010','11001000010','11110001010','10100110000','10100001100',
+  '10010110000','10010000110','10000101100','10000100110','10110010000',
+  '10110000100','10011010000','10011000010','10000110100','10000110010',
+  '11000010010','11001010000','11110111010','11000010100','10001111010',
+  '10100111100','10010111100','10010011110','10111100100','10011110100',
+  '10011110010','11110100100','11110010100','11110010010','11011011110',
+  '11011110110','11110110110','10101111000','10100011110','10001011110',
+  '10111101000','10111100010','11110101000','11110100010','10111011110',
+  '10111101110','11101011110','11110101110','11010000100','11010010000',
+  '11010011100','1100011101011',
+];
+
+function code128Modules(text) {
+  const values = [];
+  // Set C for even-length digit strings (more compact), otherwise Set B.
+  if (text.length > 0 && text.length % 2 === 0 && /^[0-9]+$/.test(text)) {
+    values.push(105); // START_C
+    for (let i = 0; i < text.length; i += 2) values.push(parseInt(text.slice(i, i + 2), 10));
+  } else {
+    values.push(104); // START_B
+    for (let i = 0; i < text.length; i++) {
+      const code = text.charCodeAt(i);
+      if (code < 32 || code > 126) throw new Error('Code128 supports printable ASCII (32-126); got char code ' + code);
+      values.push(code - 32);
+    }
+  }
+  let sum = values[0];
+  for (let i = 1; i < values.length; i++) sum += values[i] * i;
+  values.push(sum % 103); // checksum
+  values.push(106); // STOP
+
+  const modules = [];
+  for (const v of values) {
+    const pat = BARS[v];
+    for (let i = 0; i < pat.length; i++) modules.push(pat[i] === '1');
+  }
+  return modules;
+}
+
+// EAN-13 digit patterns (7 modules, 1=bar). Source: ISO/IEC 15420 / GS1.
+const EAN_L = ['0001101','0011001','0010011','0111101','0100011','0110001','0101111','0111011','0110111','0001011'];
+const EAN_G = ['0100111','0110011','0011011','0100001','0011101','0111001','0000101','0010001','0001001','0010111'];
+const EAN_R = ['1110010','1100110','1101100','1000010','1011100','1001110','1010000','1000100','1001000','1110100'];
+// First digit -> L/G pattern for the 6 left digits (0=L, 1=G).
+const EAN_PARITY = [
+  '000000', // 0: LLLLLL
+  '001011', // 1: LLGLGG
+  '001101', // 2: LLGGLG
+  '001110', // 3: LLGGGL
+  '010011', // 4: LGLLGG
+  '011001', // 5: LGGLLG
+  '011100', // 6: LGGGLL
+  '010101', // 7: LGLGLG
+  '010110', // 8: LGLGGL
+  '011010', // 9: LGGLGL
+];
+
+function ean13Modules(input) {
+  let s = String(input).trim();
+  if (!/^[0-9]+$/.test(s)) throw new Error('EAN-13 needs digits only');
+  if (s.length === 12) s += ean13Check(s);
+  if (s.length !== 13) throw new Error('EAN-13 needs 12 or 13 digits');
+  const digits = s.split('').map(Number);
+  const first = digits[0];
+  const parity = EAN_PARITY[first];
+  const left = digits.slice(1, 7);
+  const right = digits.slice(7, 13);
+
+  const modules = [];
+  const push = (pat) => { for (let i = 0; i < pat.length; i++) modules.push(pat[i] === '1'); };
+
+  push('101'); // start guard
+  for (let i = 0; i < 6; i++) {
+    push(parity[i] === '0' ? EAN_L[left[i]] : EAN_G[left[i]]);
+  }
+  push('01010'); // center guard
+  for (let i = 0; i < 6; i++) push(EAN_R[right[i]]);
+  push('101'); // end guard
+  return modules;
+}
+
+function ean13Check(d12) {
+  let sum = 0;
+  for (let i = 0; i < 12; i++) {
+    const d = Number(d12[i]);
+    sum += (i % 2 === 0) ? d : d * 3; // position 1,3,5... weight 1; 2,4,6... weight 3
+  }
+  return String((10 - (sum % 10)) % 10);
+}
+
+// ---------- 1D renderers ----------
+function renderBarcodeSvg(modules, opts) {
+  const scale = opts.scale || 2;
+  const border = opts.border || 10; // modules of quiet zone (EAN/128 need >= 10)
+  const height = opts.height || 60; // bar height in px
+  const n = modules.length;
+  const dim = (n + border * 2) * scale;
+  const fg = opts.fg || '#000000';
+  const bg = opts.bg || '#ffffff';
+  let rects = '';
+  let runStart = -1;
+  for (let i = 0; i <= n; i++) {
+    const dark = i < n && modules[i];
+    if (dark && runStart < 0) runStart = i;
+    if (!dark && runStart >= 0) {
+      rects += '<rect x="' + (runStart + border) * scale + '" y="' + border * scale + '" width="' + (i - runStart) * scale + '" height="' + height + '"/>';
+      runStart = -1;
+    }
+  }
+  return '<svg xmlns="http://www.w3.org/2000/svg" width="' + dim + '" height="' + (height + border * 2 * scale) + '" viewBox="0 0 ' + dim + ' ' + (height + border * 2 * scale) + '" shape-rendering="crispEdges"><rect width="' + dim + '" height="' + (height + border * 2 * scale) + '" fill="' + bg + '"/>' + rects + '</svg>';
+}
+
+function renderBarcodeAscii(modules, border) {
+  const pad = ' '.repeat(border);
+  const line = pad + modules.map(function (m) { return m ? '\u2588' : ' '; }).join('') + pad;
+  return [line, line, line].join('\n'); // 3 rows for readability
+}
+
+function renderBarcodePngDataUrl(modules, opts) {
+  const scale = opts.scale || 2;
+  const border = opts.border || 10;
+  const height = opts.height || 60;
+  const n = modules.length;
+  const width = (n + border * 2) * scale;
+  const fullH = (height + border * 2 * scale);
+  const fg = hexToRgb(opts.fg || '#000000') || [0, 0, 0];
+  const bg = hexToRgb(opts.bg || '#ffffff') || [255, 255, 255];
+  const bytes = pngEncode(width, fullH, function (x, y) {
+    const mx = Math.floor(x / scale) - border;
+    const dark = mx >= 0 && mx < n && modules[mx] && y >= border * scale && y < border * scale + height;
+    return dark ? [fg[0], fg[1], fg[2], 255] : [bg[0], bg[1], bg[2], 255];
+  });
+  return 'data:image/png;base64,' + bytesToBase64(bytes);
+}
+
 
 const ECL_NAMES = { L: 0, M: 1, Q: 2, H: 3 };
 
-function compute(args) {
+function qrCompute(args) {
   const text = args && args.text != null ? String(args.text) : '';
   if (text === '') throw new Error('text is required (the content to encode)');
   const eclKey = args && args.ecl ? String(args.ecl).toUpperCase() : 'M';
@@ -550,24 +704,49 @@ function compute(args) {
   return { format: 'svg', output: renderSvg(qr.matrix, ro) };
 }
 
+function barcodeCompute(args) {
+  const text = args && args.text != null ? String(args.text) : '';
+  if (text === '') throw new Error('text is required (the content to encode)');
+  const symbology = args && args.symbology ? String(args.symbology).toLowerCase() : 'code128';
+  const format = args && args.format ? String(args.format).toLowerCase() : 'svg';
+  const scale = (args && args.scale != null && args.scale !== '') ? Math.max(1, Math.min(16, Math.floor(Number(args.scale)))) : 2;
+  const border = (args && args.border != null && args.border !== '') ? Math.max(0, Math.min(40, Math.floor(Number(args.border)))) : 10;
+  const height = (args && args.height != null && args.height !== '') ? Math.max(10, Math.min(400, Math.floor(Number(args.height)))) : 60;
+  const fg = args && args.fg ? String(args.fg) : '#000000';
+  const bg = args && args.bg ? String(args.bg) : '#ffffff';
+  const ro = { scale: scale, border: border, height: height, fg: fg, bg: bg };
+  const modules = symbology === 'ean13' ? ean13Modules(text) : code128Modules(text);
+  if (format === 'ascii') return { format: 'ascii', output: renderBarcodeAscii(modules, Math.max(1, Math.min(20, border))) };
+  if (format === 'png') return { format: 'png', output: renderBarcodePngDataUrl(modules, ro) };
+  return { format: 'svg', output: renderBarcodeSvg(modules, ro) };
+}
+
 function run(args) {
   try {
-    const r = compute(args);
+    const op = args && args.op ? String(args.op) : 'qrcode';
+    const r = op === 'barcode' ? barcodeCompute(args) : qrCompute(args);
     return { ok: true, format: r.format, output: r.output };
   } catch (e) {
     return { ok: false, format: '', error: String((e && e.message) || e) };
   }
 }
 
+const QR_DESC = 'Generate a QR code offline (pure local computation, no network, no shell, cross-platform). ' +
+  'Encodes the given text into a QR code. Common formats: a URL, a WIFI string (WIFI:T:WPA;S:ssid;P:pass;;), ' +
+  'a tel: URI (tel:+8613800138000), an SMS URI (SMSTO:+8613800138000:hi), or a vCard (BEGIN:VCARD ... END:VCARD). ' +
+  'format: "svg" (default; save to a .svg file), "ascii" (terminal preview), or "png" (base64 data URL). ' +
+  'ecl: L/M/Q/H error correction (default M). scale: module px (default 4). border: quiet-zone modules (default 4). ' +
+  'fg/bg: hex colors (default #000000/#ffffff). mask: optional 0-7 (omit for auto).';
+
+const BAR_DESC = 'Generate a 1D barcode offline (Code128 or EAN-13). ' +
+  'symbology: "code128" (default, printable ASCII) or "ean13" (12 or 13 digits; 12 -> auto checksum). ' +
+  'format: "svg" (default) | "ascii" | "png". scale: module px (default 2). border: quiet-zone modules (default 10). ' +
+  'height: bar height px (default 60). fg/bg: hex colors.';
+
 export function apply(ctx) {
   ctx.tools.register(defineTool({
     name: 'qrcode',
-    description: 'Generate a QR code offline (pure local computation, no network, no shell, cross-platform). ' +
-      'Encodes the given text (a URL, a WIFI: string, contact info, or any text) into a QR code. ' +
-      'format: "svg" (default; scalable vector markup you can save to a .svg file), "ascii" (terminal preview), or "png" (base64 data URL). ' +
-      'ecl: error correction level L/M/Q/H (default M, higher = more damage tolerance). ' +
-      'scale: module pixel size for svg/png (default 4). border: quiet-zone width in modules (default 4). ' +
-      'fg/bg: hex foreground/background colors (default #000000 / #ffffff). mask: optional 0-7 to force a mask (omit for auto).',
+    description: QR_DESC,
     parameters: {
       text: { type: 'string', required: true, description: 'The content to encode into the QR code.' },
       format: { type: 'string', description: 'Output format.', enum: ['svg', 'ascii', 'png'] },
@@ -579,26 +758,37 @@ export function apply(ctx) {
       mask: { type: 'integer', description: 'Force data mask 0-7 (omit to auto-select the best mask).' },
     },
     output: {
-      schema: {
-        type: 'object',
-        additionalProperties: false,
-        properties: {
-          ok: { type: 'boolean' },
-          format: { type: 'string' },
-          output: { type: 'string' },
-          error: { type: 'string' },
-        },
-      },
+      schema: { type: 'object', additionalProperties: false, properties: { ok: { type: 'boolean' }, format: { type: 'string' }, output: { type: 'string' }, error: { type: 'string' } } },
       render: function (args, value) {
         if (!value.ok) return [{ type: 'text', text: 'qrcode error: ' + value.error }];
-        if (value.format === 'png') {
-          return [{ type: 'text', text: 'QR code PNG generated (' + value.output.length + '-char data URL). To save a file the agent can write, use format=svg and write the returned markup to a .svg file.' }];
-        }
+        if (value.format === 'png') return [{ type: 'text', text: 'QR PNG generated (' + value.output.length + '-char data URL). Use format=svg to save a file.' }];
         return [{ type: 'text', text: value.output }];
       },
     },
-    execute: async function (args) {
-      return run(args);
+    execute: async function (args) { return run(Object.assign({ op: 'qrcode' }, args)); },
+  }));
+
+  ctx.tools.register(defineTool({
+    name: 'barcode',
+    description: BAR_DESC,
+    parameters: {
+      text: { type: 'string', required: true, description: 'Content: any printable ASCII for code128, or 12/13 digits for ean13.' },
+      symbology: { type: 'string', description: 'Which 1D symbology.', enum: ['code128', 'ean13'] },
+      format: { type: 'string', description: 'Output format.', enum: ['svg', 'ascii', 'png'] },
+      scale: { type: 'integer', description: 'Module pixel size (default 2).' },
+      border: { type: 'integer', description: 'Quiet-zone modules (default 10).' },
+      height: { type: 'integer', description: 'Bar height px (default 60).' },
+      fg: { type: 'string', description: 'Foreground color hex.' },
+      bg: { type: 'string', description: 'Background color hex.' },
     },
+    output: {
+      schema: { type: 'object', additionalProperties: false, properties: { ok: { type: 'boolean' }, format: { type: 'string' }, output: { type: 'string' }, error: { type: 'string' } } },
+      render: function (args, value) {
+        if (!value.ok) return [{ type: 'text', text: 'barcode error: ' + value.error }];
+        if (value.format === 'png') return [{ type: 'text', text: 'Barcode PNG generated (' + value.output.length + '-char data URL). Use format=svg to save a file.' }];
+        return [{ type: 'text', text: value.output }];
+      },
+    },
+    execute: async function (args) { return run(Object.assign({ op: 'barcode' }, args)); },
   }));
 }
