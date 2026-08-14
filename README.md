@@ -4,7 +4,7 @@ An offline QR code and barcode generator for DeepSeek Harness. Pure local comput
 
 ## Overview
 
-Generates scannable codes directly from the agent or user: QR codes (URL, WiFi, vCard, tel, sms) as SVG / PNG / ASCII, and 1D barcodes (Code128 / EAN-13) as SVG / ASCII / PNG. Solves "I need a QR code but have no network/library access" inside DSH sessions.
+DeepSeek Harness sessions often run with restricted network access (no npm, no CDN, no online encoder APIs), so generating a scannable code from inside a session is not trivial. This plugin solves that: it provides `qrcode` and `barcode` model tools that encode and render entirely locally, with zero runtime dependencies. It is for agents and users who need QR codes (URLs, WiFi, vCard, tel, sms) or 1D barcodes (Code128, EAN-13) as SVG / PNG / ASCII output inside any DSH session — including fully offline or sandboxed ones.
 
 ## Compatibility
 
@@ -89,9 +89,9 @@ cd dsh-qrcode
 node --check index.js
 ```
 
-The encoder was validated against `zxing-cpp` (96/96 test vectors, versions 1–40, all masks/EC levels) and cross-checked with `segno` for mask scoring.
+The encoder was validated against `zxing-cpp` (96/96 test vectors, versions 1–40, all masks/EC levels) and cross-checked with `segno` for mask scoring. The suite lives in the commit history of this repository.
 
-Contributions: open issues/PRs on GitHub. Keep changes dependency-free.
+Contributions: open issues and pull requests on GitHub. Keep changes dependency-free (the encoder is self-contained). Report bugs with a minimal reproduction case.
 
 ## License & security
 
