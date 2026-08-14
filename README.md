@@ -1,7 +1,5 @@
 # dsh-qrcode
 
-DeepSeek Harness 离线二维码/条码生成插件：`qrcode` 生成二维码（URL / WiFi / vCard / tel / sms），`barcode` 生成 Code128 / EAN-13，纯本地、零网络、零依赖。
+Offline QR code and barcode generator for DeepSeek Harness: the `qrcode` tool emits SVG / PNG / ASCII QR codes (URL, WiFi, vCard, tel, sms) and the `barcode` tool emits Code128 / EAN-13. Pure local computation — no network, no shell, no dependencies.
 
-https://github.com/hellosky983/dsh-qrcode
-
-安装：`dsh plugin --profile web add github:hellosky983/dsh-qrcode`
+Install: `dsh plugin add github:hellosky983/dsh-qrcode`
