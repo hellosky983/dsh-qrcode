@@ -18,12 +18,6 @@
 - ✅ **可定制**：前景/背景色、尺寸、边距、强制掩码
 - ✅ **已验证**：用 zxing-cpp 解码器验证二维码 96/96、条码 7/7 全部正确解码
 
-## 📸 效果预览
-
-| 二维码 | Code128 | EAN-13 |
-|---|---|---|
-| ![qr](screenshots/qr-demo.png) | ![code128](screenshots/barcode-code128.png) | ![ean13](screenshots/barcode-ean13.png) |
-
 ## 🚀 快速开始（傻瓜式）
 
 **环境要求**：已安装 `dsh` CLI（DeepSeek Harness）。
@@ -91,7 +85,6 @@ dsh-qrcode/
 ├── package.json        # 声明 dsh.bundle（插件的安装清单）
 ├── cordis.patch.yml    # 插入到 composition 的补丁层
 ├── index.js            # 插件入口：QR 编码器 + 条码 + 注册 qrcode/barcode 工具
-├── screenshots/        # 效果图
 ├── README.md
 └── LICENSE
 ```
