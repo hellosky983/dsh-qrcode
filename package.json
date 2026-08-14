@@ -4,8 +4,30 @@
   "description": "Offline QR code generator for DeepSeek Harness (dsh): pure-JS, no network, no shell, cross-platform. Model tools (qrcode + barcode) with SVG/PNG/ASCII output.",
   "type": "module",
   "main": "index.js",
-  "files": ["index.js", "cordis.patch.yml"],
+  "exports": {
+    ".": "./index.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hellosky983/dsh-qrcode.git"
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "qrcode",
+    "barcode",
+    "code128",
+    "ean13"
+  ],
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
