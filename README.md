@@ -1,5 +1,8 @@
 # dsh-qrcode
 
+[![Awesome DSH Plugin](https://awesome-dsh-plugin.com/badge.svg)](https://awesome-dsh-plugin.com)
+
+
 An offline QR code and barcode generator for DeepSeek Harness. Pure local computation — no network, no shell, no dependencies.
 
 ## Overview
